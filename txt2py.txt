@@ -1,0 +1,3 @@
+Get-ChildItem "C:\Users\shawk\Desktop\aaa\*.txt" -Recurse | Rename-Item -NewName {$_.BaseName + ".py"}
+
+Get-ChildItem "C:\Users\shawk\Desktop\aaa\*.py" -Recurse | Rename-Item -NewName {$_.BaseName + ".txt"}
