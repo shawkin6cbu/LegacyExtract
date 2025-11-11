@@ -108,9 +108,19 @@ def parse_any_legacy_contract_text(original_text_from_pdf: str) -> dict:
         return default
 
     def clean_phone(phone_str):
-        if phone_str:
-            return re.sub(r'\D', '', phone_str)
-        return ""
+        if not phone_str:
+            return ""
+        
+        # First, extract only the digits from the input string
+        phone_digits = re.sub(r'\D', '', phone_str)
+        
+        # Check if we have a standard 10-digit number
+        if len(phone_digits) == 10:
+            # Apply the desired (###)###-#### formatting
+            return f"({phone_digits[0:3]}){phone_digits[3:6]}-{phone_digits[6:]}"
+        else:
+            # If it's not 10 digits, return the cleaned digits without formatting
+            return phone_digits
 
     def clean_currency(currency_str):
         if currency_str:
@@ -140,7 +150,7 @@ def parse_any_legacy_contract_text(original_text_from_pdf: str) -> dict:
     data['AG701LIC'] = "24125"
     data['AG701AD1'] = "5740 Getwell Rd Bldg 8B"
     data['AG701AD2'] = "Southaven, MS 38672"
-    data['AG701PH'] = "6629322282"
+    data['AG701PH'] = clean_phone("6629322282")
     # --- End Hardcoded Fields ---
 
     data['INCITY'] = 'X'
@@ -214,7 +224,7 @@ def parse_any_legacy_contract_text(original_text_from_pdf: str) -> dict:
     buyer_contact_block_match = re.search(r"hereafter called BUYER\(s\), whose address, phone numbers, and email address(?:es)? are listed below\s*(.*?)\s*hereby agree", globally_cleaned_text, re.DOTALL | re.IGNORECASE)
     if buyer_contact_block_match:
         contact_details_str = buyer_contact_block_match.group(1)
-        buyer_contacts_pattern = r"(\d+[\w\s\.,#-]*?(?:Street|St|Road|Rd|Drive|Dr|Avenue|Ave|Lane|Ln|Cove|Cv|Court|Ct|Place|Pl|Boulevard|Blvd))\s+([A-Za-z\s'-]+?)\s+(MS|TN|TX|MISSISSIPPI|TENNESSEE|TEXAS)\s+(\d{5})\s*\(?(\d{3})\)?\s*(\d{3}-\d{4})\s+([\w\.@-]+)"
+        buyer_contacts_pattern = r"(\d+[\w\s\.,#-]*?(?:Street|St|Road|Rd|Drive|Dr|Avenue|Ave|Lane|Ln|Cove|Cv|Court|Ct|Place|Pl|Boulevard|Blvd))\s+([A-Za-z\s'-]+?)\s+([A-Z]{2})\s+(\d{5})\s*\(?(\d{3})\)?\s*(\d{3}-\d{4})\s+([\w\.@-]+)"
         buyer_contacts_fallback_pattern = r"(\d+[\w\s\.,#-]*?\s\w+)\s+([A-Za-z\s'-]+?)\s+(MS|TN|TX|MISSISSIPPI|TENNESSEE|TEXAS)\s+(\d{5})\s*\(?(\d{3})\)?\s*(\d{3}-\d{4})\s+([\w\.@-]+)"
         buyer_contacts = re.findall(buyer_contacts_pattern, contact_details_str, re.IGNORECASE)
         if not buyer_contacts:
@@ -269,7 +279,7 @@ def parse_any_legacy_contract_text(original_text_from_pdf: str) -> dict:
             data['AG701NAM'] = data['AG701NAM'].replace(',', '').strip()
         l_agent_phone_match = re.search(r"Listing Agent\s+[\w\s,-]+?Business Phone\s*([()\d\s-]+?)(?=\s*Address|\s*Email)", listing_agent_block_text, re.IGNORECASE)
         data['AG701MO'] = clean_phone(l_agent_phone_match.group(1)) if l_agent_phone_match else ""
-        data['AG701EMAIL'] = search_and_extract(r"Email\s+([\w\.@-]+?)(?=\s+License #:\s*Agent|\s*$)", listing_agent_block_text)
+        data['AG701EMAIL'] = search_and_extract(r"Email\s+([\w\.@-]+?)(?=\s|[Ll]icense|$)", listing_agent_block_text)
         data['AG701CONTLIC'] = search_and_extract(r"License #:\s*Agent\s*(.*?)(?=Selling Agency|$)", listing_agent_block_text)
     else:
         for k in ['AG701NAM', 'AG701MO', 'AG701EMAIL', 'AG701CONTLIC']:
@@ -279,7 +289,7 @@ def parse_any_legacy_contract_text(original_text_from_pdf: str) -> dict:
     selling_agent_block_text_for_details = selling_agent_block_match.group(1).strip() if selling_agent_block_match else ""
     if selling_agent_block_text_for_details:
         data['AG702FRM'] = search_and_extract(r"^([\w\s.,'&@#-]+?)(?=\s*Selling Agent|\s*Business Phone)", selling_agent_block_text_for_details)
-        data['AG702LIC'] = search_and_extract(r"License #:\s*Firm\s*([S\d][\w-]+?)(?=\s*License #:\s*Agent|\s*Email:|$)", selling_agent_block_text_for_details)
+        data['AG702LIC'] = search_and_extract(r"License #:\s*Firm\s*([S\d][\w-]+?)(?=\s*[Ll]icense|\s*Email:|$)", selling_agent_block_text_for_details)
         if data['AG702LIC']: data['AG702LIC'] = data['AG702LIC'].replace(" ", "")
         s_addr_match = re.search(r"Address:\s*([\w\s\.\d#-]+(?:Street|Parkway|Road|Rd)?(?:,\s*\#?\w+)?)\s*,\s*([A-Za-z\s'-]+?)\s*,\s*(MISSISSIPPI|MS|TENNESSEE|TN|TEXAS|TX)(?:,\s*(\d{5})(?:,\s*United States of America)?)?", selling_agent_block_text_for_details, re.IGNORECASE)
         zip_s = ""
@@ -291,12 +301,12 @@ def parse_any_legacy_contract_text(original_text_from_pdf: str) -> dict:
                 if zip_s_alt_match: zip_s = zip_s_alt_match.group(1).strip()
             data['AG702AD2'] = f"{city_s}, {state_s} {zip_s}" if zip_s else f"{city_s}, {state_s}"
         else: data['AG702AD1'], data['AG702AD2'] = "", ""
-        data['AG702PH'] = clean_phone(search_and_extract(r"Business Phone\s*([()\d\s-]+?)(?=\s+Address:|\s+Selling Agent)", selling_agent_block_text_for_details))
+        data['AG702PH'] = clean_phone(search_and_extract(r"Business Phone\s*([()\d\s-]+?)(?=\s*Address:)", selling_agent_block_text_for_details))
         data['AG702NAM'] = search_and_extract(r"Selling Agent\s+([\w\s,-]+?)(?=\s*Business Phone|,Business Phone)", selling_agent_block_text_for_details)
         if data['AG702NAM']: data['AG702NAM'] = data['AG702NAM'].replace(',', '').strip()
-        sa_phone_match = re.search(r"Selling Agent\s+[\w\s,-]+?Business Phone\s*([()\d\s-]+?)(?=\s*Address|\s*Email)", selling_agent_block_text_for_details, re.IGNORECASE)
+        sa_phone_match = re.search(r"Selling Agent\s+[\w\s,-]+?\s*Business Phone\s*([()\d\s-]+?)(?=\s*Address|\s*Email)", selling_agent_block_text_for_details, re.IGNORECASE)
         data['AG702MO'] = clean_phone(sa_phone_match.group(1)) if sa_phone_match else ""
-        data['AG702EMAIL'] = search_and_extract(r"Email:\s*([\w\.@-]+)", selling_agent_block_text_for_details)
+        data['AG702EMAIL'] = search_and_extract(r"Email:\s*([\w\.@-]+?)(?=\s|License|$)", selling_agent_block_text_for_details)
     else:
         for k in ['AG702FRM', 'AG702PH', 'AG702AD1', 'AG702AD2', 'AG702LIC', 'AG702NAM', 'AG702MO', 'AG702EMAIL']: data.setdefault(k, "")
 
